@@ -1,0 +1,66 @@
+q16:
+
+CREATE PROCEDURE sp_IssueBook
+    @MemberID INT,
+    @BookID INT,
+    @DueDate DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @IsAvailable BIT;
+    DECLARE @OverdueCount INT;
+
+    /* 1. Check Member exists */
+    IF NOT EXISTS (SELECT 1 FROM MEMBER_TABLE WHERE MemberID = @MemberID)
+    BEGIN
+        PRINT 'Error: Member does not exist.';
+        RETURN;
+    END
+
+    /* 2. Check Book exists and availability */
+    SELECT @IsAvailable = IsAvailable
+    FROM Book
+    WHERE BookID = @BookID;
+
+    IF @IsAvailable IS NULL
+    BEGIN
+        PRINT 'Error: Book does not exist.';
+        RETURN;
+    END
+
+    IF @IsAvailable = 0
+    BEGIN
+        PRINT 'Error: Book is currently not available.';
+        RETURN;
+    END
+
+    /* 3. Check for overdue loans */
+    SELECT @OverdueCount = COUNT(*)
+    FROM Loan_table
+    WHERE MemberID = @MemberID
+      AND Status = 'Overdue';
+
+    IF @OverdueCount > 0
+    BEGIN
+        PRINT 'Error: Member has overdue loans.';
+        RETURN;
+    END
+
+    /* 4. Issue Book */
+    INSERT INTO Loan_table (MemberID, BookID, LoanDate, DueDate, Status)
+    VALUES (@MemberID, @BookID, CAST(GETDATE() AS DATE), @DueDate, 'Issued');
+
+    /* 5. Update Book availability */
+    UPDATE Book
+    SET IsAvailable = 0
+    WHERE BookID = @BookID;
+
+    PRINT 'Success: Book issued successfully.';
+END;
+GO
+
+EXEC sp_IssueBook
+    @MemberID = 2,
+    @BookID = 5,
+    @DueDate = '2026-01-15';
